@@ -6,11 +6,12 @@ from . import CoherenceMatrix
 
 class MixingMatrix:
     def __init__(
-        self, coherence_matrix: CoherenceMatrix.CoherenceMatrix, decomposition: str, processing: str
+        self, coherence_matrix: CoherenceMatrix.CoherenceMatrix, decomposition: str, processing: str, rng=None
     ):
         self.coherence_matrix = coherence_matrix
         self.decomposition = decomposition
         self.processing = processing
+        self.rng = np.random if rng is None else rng
 
         self.matrix, self.matrix_std = self.compute_mixing_matrix()
 
@@ -53,14 +54,14 @@ class MixingMatrix:
             elif self.processing == "standard":
                 continue
             elif self.processing == "balance":
-                C[:, :, k] = MixingMatrix.balance(C[:, :, k])
+                C[:, :, k] = self.balance(C[:, :, k])
             elif self.processing == "smooth":
-                C[:, :, k - 1] = MixingMatrix.smooth(C[:, :, k], C[:, :, k - 1])
+                C[:, :, k - 1] = self.smooth(C[:, :, k], C[:, :, k - 1])
             elif self.processing == "balance+smooth":
                 if k == K // 2:
-                    C[:, :, k] = MixingMatrix.balance(C[:, :, k], U_type="orthogonal")
-                C[:, :, k - 1] = MixingMatrix.smooth(C[:, :, k], C[:, :, k - 1])
-                C[:, :, k - 1] = MixingMatrix.balance_perserving_smoothness(
+                    C[:, :, k] = self.balance(C[:, :, k], U_type="orthogonal")
+                C[:, :, k - 1] = self.smooth(C[:, :, k], C[:, :, k - 1])
+                C[:, :, k - 1] = self.balance_perserving_smoothness(
                     C[:, :, k - 1]
                 )
             else:
@@ -314,8 +315,7 @@ class MixingMatrix:
 
         fig.supylabel("Magnitude [dB]")
 
-    @staticmethod
-    def balance(C, U_type="unitary"):
+    def balance(self, C, U_type="unitary"):
         """
         Compute optimal balance B = U * C with max l1(U * C) for U
         unitary or orthogonal.
@@ -334,17 +334,16 @@ class MixingMatrix:
 
         # Perform optimization
         if U_type == "unitary":
-            U = MixingMatrix.absoluteUnitaryProcrustes(C, H)
+            U = self.absoluteUnitaryProcrustes(C, H)
         elif U_type == "orthogonal":
-            U = MixingMatrix.absoluteOrthogonalProcrustes(C, H)
+            U = self.absoluteOrthogonalProcrustes(C, H)
 
         # Compute balanced matrix
         B = U @ C
 
         return B
 
-    @staticmethod
-    def absoluteUnitaryProcrustes(A, B):
+    def absoluteUnitaryProcrustes(self, A, B):
         """
         Solves || abs(U * A) - abs(B) ||_F with unitary U.
         """
@@ -357,10 +356,10 @@ class MixingMatrix:
 
         for _ in range(MaximumTrails):
             # Perform optimization
-            U = MixingMatrix.signVariableExchange(A, newPhases, False)
+            U = self.signVariableExchange(A, newPhases, False)
 
             # Evaluate l1-norm of obtained unitary matrix
-            l1 = MixingMatrix.l1norm(U @ A)
+            l1 = self.l1norm(U @ A)
 
             # Check if this is the best matrix so far
             if l1 > bestL1:
@@ -368,12 +367,11 @@ class MixingMatrix:
                 bestMatrix = U
 
             # Generate new (random) normalized phase matrix
-            newPhases = np.exp(1j * np.random.rand(N, N) * 2 * np.pi)
+            newPhases = np.exp(1j * self.rng.random(size=(N, N)) * 2 * np.pi)
 
         return bestMatrix
 
-    @staticmethod
-    def absoluteOrthogonalProcrustes(A, B):
+    def absoluteOrthogonalProcrustes(self, A, B):
         """
         Solves || abs(U * A) - abs(B) ||_F with ortogonal U for
         A, B and U being real-valued.
@@ -387,10 +385,10 @@ class MixingMatrix:
 
         for _ in range(MaximumTrails):
             # Perform optimization
-            U = MixingMatrix.signVariableExchange(A, newSigns, False)
+            U = self.signVariableExchange(A, newSigns, False)
 
             # Evaluate l1-norm of obtained unitary matrix
-            l1 = MixingMatrix.l1norm(U @ A)
+            l1 = self.l1norm(U @ A)
 
             # Check if this is the best matrix so far
             if l1 > bestL1:
@@ -398,12 +396,11 @@ class MixingMatrix:
                 bestMatrix = U
 
             # Generate new (random) normalized phase matrix
-            newSigns = np.sign(np.random.rand(N, N) * 2 - 1)
+            newSigns = np.sign(self.rng.random(size=(N, N)) * 2 - 1)
 
         return bestMatrix
 
-    @staticmethod
-    def signVariableExchange(A, B, verbose=False):
+    def signVariableExchange(self, A, B, verbose=False):
         """
         Perform the variable exchange optimization.
 
@@ -428,7 +425,7 @@ class MixingMatrix:
             phaseB = Phases
 
             # Procrustes solution
-            U = MixingMatrix.procrustes(A, phaseB)
+            U = self.procrustes(A, phaseB)
 
             # Compute Frobenius norm of (U*A - phaseB)
             newFit[counter] = np.linalg.norm((U @ A) - phaseB, "fro")
@@ -439,7 +436,7 @@ class MixingMatrix:
             bestFit = newFit[counter]
 
             # Store l1norm
-            l1Fit[counter] = MixingMatrix.l1norm(U @ A)
+            l1Fit[counter] = self.l1norm(U @ A)
 
             # Store the unitary matrix
             # Us.append(U)
@@ -466,8 +463,7 @@ class MixingMatrix:
 
         return U
 
-    @staticmethod
-    def procrustes(A, B):
+    def procrustes(self, A, B):
         """
         Compute nearest orthogonal matrix U (in the Frobenius norm) via SVD such
         that it minimizes U*A - B.
@@ -487,8 +483,7 @@ class MixingMatrix:
 
         return U
 
-    @staticmethod
-    def smooth(C, C_plus):
+    def smooth(self, C, C_plus):
         """
         Compute nearest UNITARY matrix U (in the Frobenius norm) via Procrustes
         solution such that (U*C_plus - C) is minimized. The output is the updated
@@ -501,13 +496,12 @@ class MixingMatrix:
         Returns:
             C_smooth (numpy.array): Smooth (w.r.t. neighbor C) mixing matrix [Channels x Channels]
         """
-        U = MixingMatrix.procrustes(C_plus, C)
+        U = self.procrustes(C_plus, C)
         C_smooth = U @ C_plus
 
         return C_smooth
 
-    @staticmethod
-    def balance_perserving_smoothness(C):
+    def balance_perserving_smoothness(self, C):
         """
         Compute balance Cbs = U * C with high l1(U * C) for U UNITARY while
         preserving smoothness (=single iteration of balance.m with closest
@@ -523,15 +517,14 @@ class MixingMatrix:
         B = np.exp(1j * np.angle(C, deg=False))
 
         # Procrustes solution
-        U = MixingMatrix.procrustes(C, B)
+        U = self.procrustes(C, B)
 
         # Smoothing-preserving balanced matrix
         Cbs = U @ C
 
         return Cbs
 
-    @staticmethod
-    def l1norm(X):
+    def l1norm(self, X):
         """
         Normalized l1 norm (element-wise)
         For ||X||_F = 1, the norm is in [0,1].
