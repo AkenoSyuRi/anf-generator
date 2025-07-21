@@ -19,7 +19,7 @@ class MixingMatrix:
         # Initialization
         M = self.get_num_channels()  # Number of channels
         K = self.get_nfft()  # Number of frequency bins
-        C = np.zeros((M, M, K), dtype=np.complex_)  # STFT mixing matrix
+        C = np.zeros((M, M, K), dtype=np.complex128)  # STFT mixing matrix
 
         # Direct Current component definition for the mixing matrix (fully coherent)
         C[:, :, 0] = np.ones((M, M)) / np.sqrt(M)
@@ -61,7 +61,7 @@ class MixingMatrix:
                 if k == K // 2:
                     C[:, :, k] = self.balance(C[:, :, k], U_type="orthogonal")
                 C[:, :, k - 1] = self.smooth(C[:, :, k], C[:, :, k - 1])
-                C[:, :, k - 1] = self.balance_perserving_smoothness(
+                C[:, :, k - 1] = self.balance_preserving_smoothness(
                     C[:, :, k - 1]
                 )
             else:
@@ -123,10 +123,10 @@ class MixingMatrix:
         M = self.get_num_channels()  # Number of channels
 
         # Pre-allocate memory
-        c1_std = np.zeros((M, M, K1), dtype=np.complex_)
-        c1 = np.zeros((M, M, K1), dtype=np.complex_)
-        C2_std = np.zeros((M, M, K2), dtype=np.complex_)
-        C2 = np.zeros((M, M, K2), dtype=np.complex_)
+        c1_std = np.zeros((M, M, K1), dtype=np.complex128)
+        c1 = np.zeros((M, M, K1), dtype=np.complex128)
+        C2_std = np.zeros((M, M, K2), dtype=np.complex128)
+        C2 = np.zeros((M, M, K2), dtype=np.complex128)
 
         for p in range(M):
             for q in range(M):
@@ -148,8 +148,8 @@ class MixingMatrix:
         DC2 = CoherenceMatrix.CoherenceMatrix(params2)
 
         # Compute generated coherence with DFT-length K2 as C'*C and nMSE
-        G_std = np.zeros((M, M, K2 // 2 + 1), dtype=np.complex_)
-        G = np.zeros((M, M, K2 // 2 + 1), dtype=np.complex_)
+        G_std = np.zeros((M, M, K2 // 2 + 1), dtype=np.complex128)
+        G = np.zeros((M, M, K2 // 2 + 1), dtype=np.complex128)
         nMSEk_std = np.zeros(K2 // 2 + 1)
         nMSEk = np.zeros(K2 // 2 + 1)
         for k in range(K2 // 2 + 1):
@@ -176,7 +176,7 @@ class MixingMatrix:
         return len(self.coherence_matrix.params.mic_positions)
 
     def __plot_smoothness_balance(self, smooth, smooth_std, bal, bal_std, eval_metrics):
-        # Define labels for ledgend
+        # Define labels for legend
         smoothness_label = (f'{self.decomposition} {self.processing}: \n'
                             f'ε = {eval_metrics["smoothness"]:.1f} dB, '
                             f'β = {eval_metrics["balance"]:.1f} dB')
@@ -211,7 +211,7 @@ class MixingMatrix:
         # Frequency vector in Hz
         Freqs = np.linspace(0, sample_frequency / 2, K2)
 
-        # Procesd the decomposition and processing strings
+        # Process the decomposition and processing strings
         decomposition = self.decomposition
         processing = self.processing
 
@@ -501,7 +501,7 @@ class MixingMatrix:
 
         return C_smooth
 
-    def balance_perserving_smoothness(self, C):
+    def balance_preserving_smoothness(self, C):
         """
         Compute balance Cbs = U * C with high l1(U * C) for U UNITARY while
         preserving smoothness (=single iteration of balance.m with closest
